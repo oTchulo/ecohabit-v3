@@ -1,5 +1,31 @@
 # Validação da implementação
 
+## Atualização para 20 atividades — 10/11/2026
+
+Versão validada: **3.1.0+2**, banco **v2**, regras novas **xp-v2**.
+
+- `flutter pub get`: sucesso, mantendo as versões do lockfile.
+- `flutter analyze`: **No issues found!** na execução final.
+- `flutter test`: **63 testes aprovados**. A mesma suíte passou com `--dart-define=CAPTURE_SCREENSHOTS=true`, atualizando as capturas dos widgets.
+- `flutter build apk --debug`: sucesso, código de saída 0; compilação em aproximadamente 222 segundos.
+- `apksigner verify --verbose`: assinatura v2 válida. `aapt dump badging` confirmou `3.1.0`, versionCode `2`, SDK mínimo 24 e target/compile 36.
+- APK: `build/app/outputs/flutter-apk/app-debug.apk`, 165.362.271 bytes. SHA-256: `02682D062D09E7F64965823A2438F663F0E0CE3F9AC77E053AC9D0775FF8B679`.
+- Instalação com `adb install -r -t`: sucesso no Pixel 6 / `emulator-5554`, preservando os dados. A atividade `br.edu.umc.ecohabit/.MainActivity` foi confirmada em primeiro plano e a tela foi inspecionada. Não foi encontrada falha do EcoHabit no buffer de crashes consultado.
+- Conferência adicional sobre cópias locais do banco real: **1 teste aprovado**. Confirmou versão 1 antes, versão 2 depois, preservação dos campos antigos de usuários/recuperação/registros, 20 atividades, 66 faixas, chaves diárias legadas e integridade referencial.
+- Essas cópias e a captura com a conta do usuário ficaram exclusivamente em `.tools/`, ignoradas pelo Git. Não foram incluídos bancos ou dados pessoais no repositório.
+
+Os 63 testes versionados cobrem as 20 atividades e fronteiras de faixas, modalidades, teto diário/mensal, registro sem XP, viradas de dia/mês/ano, conquistas vitalícias, ranking, idempotência, referências repetidas, corridas e migração. Os testes de interface cobrem busca, sete chips (Todas + seis categorias), quantidade fixa da conquista, botão “Concluída” bloqueado e referência obrigatória em registro mensal. A matriz de faixas dos testes é independente das constantes usadas na inicialização.
+
+A migração em arquivo preserva conta, credenciais derivadas, sessão, IDs, data local, instante UTC e XP legado. Um segundo caso provoca falha durante a migração e confirma rollback de DDL, catálogo, dados e `user_version`. A mensagem “falha controlada” impressa nesse teste é esperada e sua exceção é verificada, não um erro pendente do aplicativo.
+
+Durante o desenvolvimento foram corrigidas referências antigas do teste de impacto (ID → código estável), a rolagem nos formulários maiores e um apontamento de estilo. As execuções com falha não foram contadas como aprovação. A conferência local do banco real também foi ajustada para usar caminhos absolutos; somente a execução aprovada é relatada como validação.
+
+O `.gitignore` existente foi revisado e já cobre caches, SDKs, arquivos `.env`, chaves de assinatura, configurações locais e bancos/arquivos auxiliares SQLite. A inspeção do histórico e dos arquivos versionados não identificou padrões de token/chave privada nem arquivos de banco/segredos a publicar. As senhas determinísticas presentes em testes são apenas fixtures de bancos temporários, não credenciais de contas reais.
+
+Limitações mantidas: quantidades inteiras, somente registros do momento atual, referências autodeclaradas, relógio local não confiável contra adulteração, fatores de CO2 não validados e ausência de teste em aparelho físico. Permaneceram avisos não fatais das ferramentas Android/JDK. A publicação e a visibilidade do GitHub precisam de confirmação pela API; a mudança para público exige autorização explícita do proprietário.
+
+## Histórico da implementação anterior
+
 Ambiente da implementação inicial: Windows, Flutter estável 3.47.9, Dart 3.13.7 e JDK 21. O diretório inicial estava vazio. SDKs e caches ficam em `.tools/`, ignorado pelo Git. A validação posterior no Pixel 6 está registrada ao final.
 
 ## Etapas e evidências
@@ -44,10 +70,10 @@ São renderizações de teste Flutter com conta explicitamente identificada como
 - A sessão nos testes automatizados usa armazenamento em memória; não se atribui a esses testes uma validação nativa do Keystore.
 - O custo de produção de PBKDF2 não foi cronometrado. O dublê usa custo reduzido para testes e há comparação do algoritmo real com vetor conhecido.
 - Não foram validados fatores de CO2; os campos correspondentes são nulos por decisão explícita e documentada.
-- A migração histórica não pode ser testada sem uma versão anterior: este é o schema inicial v1. Versões futuras precisam de migrações implementadas e testadas.
+- Na implementação inicial o schema era v1 e não havia banco anterior. A atualização para v2 possui testes de migração e rollback, descritos acima.
 - O resultado de CI remoto não faz parte da validação local registrada aqui; deve ser consultado no GitHub Actions.
 
-## Resultado Android
+## Resultado Android da etapa anterior (3.0.0)
 
 APK final gerado em `build/app/outputs/flutter-apk/app-debug.apk` e verificado em 10/11/2026.
 

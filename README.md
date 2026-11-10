@@ -2,14 +2,16 @@
 
 Plataforma gamificada de sustentabilidade urbana, desenvolvida em Flutter para Android como projeto acadêmico de Engenharia de Software da Universidade de Mogi das Cruzes (UMC), relacionada aos ODS 7 e 11.
 
-O objetivo é incentivar hábitos sustentáveis por meio de registros de reciclagem de garrafas, deslocamentos de bicicleta e economia de energia. O MVP funciona offline e guarda os dados em SQLite, sem serviços externos de armazenamento.
+O objetivo é incentivar hábitos sustentáveis por meio de **20 atividades em seis categorias**, com pontuação diária, mensal e conquistas únicas. O MVP funciona offline e guarda os dados em SQLite, sem serviços externos de armazenamento. Versão do aplicativo: **3.1.0+2**; versão do banco: **2**.
 
 ## Funcionalidades
 
 - Cadastro e login locais, e-mail único, senha derivada com salt e sessão protegida.
 - Recuperação offline autenticada por código secreto de uso único, com rotação; alteração de senha mediante senha atual; logout.
-- Catálogo com filtros, múltiplos registros por dia e prévia do XP adicional.
-- XP calculado sobre quantidade acumulada diária, limites configuráveis e transações idempotentes.
+- Catálogo SQLite com 20 códigos estáveis, seis filtros de categoria, busca por nome/código e prévia de XP.
+- XP acumulado por atividade/usuário/período: 15 atividades diárias, três mensais e duas conquistas únicas.
+- Referência de trajeto/evento para impedir duplicidade entre atividades mutuamente exclusivas, além da idempotência por operação.
+- Cards com quantidade e XP reais do período, limite, modalidade e status “Concluída” nas conquistas.
 - Cinco níveis, progresso até o próximo nível e aviso de promoção.
 - Início com resumo, perfil e histórico persistido, incluindo ações que concederam zero XP.
 - Ranking geral e semanal entre contas reais do mesmo dispositivo.
@@ -24,7 +26,8 @@ Flutter estável 3.47.9, Dart 3.13.7, Provider, sqflite, cryptography, flutter_s
 lib/
   main.dart
   app/                 Aplicativo, localização pt-BR e tema
-  core/database/       Schema versionado e catálogo inicial
+  core/database/       Schema v1, migração atômica v1 → v2 e integridade
+  core/constants/      Catálogo aprovado, categorias, ícones e cores
   models/              Entidades, níveis e datas locais
   repositories/        Autenticação e consultas/transações SQLite
   services/            Senhas e impacto ambiental
@@ -92,21 +95,52 @@ Para regenerar as capturas dos widgets reais, com conta exclusiva do teste e ban
 flutter test test/app_flow_test.dart --dart-define=CAPTURE_SCREENSHOTS=true
 ```
 
-Os testes cobrem autenticação e recuperação, todas as fronteiras das faixas, acumulado diário, teto menor configurado, ações sem XP, virada de dia, níveis, ranking, idempotência, concorrência, integridade referencial e persistência após reabertura. O fluxo de interface usa o mesmo SQLite dos testes para registrar uma ação e verificar navegação, ranking, histórico e logout. O custo PBKDF2 é reduzido apenas no dublê de testes; não se trata de validação do Keystore em dispositivo Android.
+Os testes cobrem autenticação e recuperação, as 66 faixas das 20 atividades, dias/meses/conquistas únicas, ações sem XP, viradas de dia/mês/ano, níveis, ranking, idempotência, referências duplicadas e concorrência. A migração é testada com banco v1 em arquivo, incluindo preservação de conta/sessão/XP e rollback completo em falha induzida. Os testes de interface verificam busca, categorias, registro mensal e bloqueio de conquista concluída, além do fluxo existente. O custo PBKDF2 é reduzido apenas no dublê de testes; não se trata de validação do Keystore em dispositivo Android.
 
 Resultados efetivamente executados são registrados em [VALIDACAO.md](docs/VALIDACAO.md). A configuração de CI está preparada; não há execução remota de GitHub Actions alegada.
 
 ## Regras de pontuação
 
-| Atividade | Faixas de quantidade acumulada no dia → XP | Teto configurado |
-| --- | --- | --- |
-| Garrafas | 1–5 → 30; 6–10 → 60; 11–20 → 100; 21+ → 150 | 200 XP |
-| Bicicleta (km inteiros) | 1–5 → 25; 6–10 → 50; 11–20 → 100; 21+ → 150 | 200 XP |
-| Energia (minutos inteiros) | 1–15 → 10; 16–30 → 25; 31–60 → 50; 61+ → 80 | 100 XP |
+Todas as quantidades são **inteiros positivos** no MVP, inclusive km, horas, kg e kWh. Cada entrada aceita até 2.147.483.647 unidades. Valores fracionários, negativos, zero ou inválidos são rejeitados, sem conversão silenciosa.
 
-O XP adicional é a diferença não negativa entre a pontuação devida após a nova quantidade e o XP já concedido naquela atividade/dia, limitado pelo teto. Com configurações constantes, equivale a `máximo(0, faixa_depois − faixa_antes)`. Quatro registros de 4, 4, 4 e 2 garrafas concedem 30, 30, 40 e 0 XP. Todos permanecem no histórico. As faixas atuais não alcançam os tetos e não geram pontos extras para preenchê-los.
+| Categoria | Código estável / atividade | Unidade | Modalidade | Quantidade acumulada → XP | Limite XP |
+| --- | --- | --- | --- | --- | --- |
+| Mobilidade sustentável | `bicicleta` — Bicicleta | km | Diária | 1–5:25; 6–10:50; 11–20:100; 21+:150 | 150 |
+| Mobilidade sustentável | `caminhada` — Caminhada | km | Diária | 1–2:20; 3–5:50; 6–10:90; 11+:130 | 130 |
+| Mobilidade sustentável | `carro_eletrico` — Carro elétrico | km | Diária | 1–10:20; 11–30:40; 31+:60 | 60 |
+| Mobilidade sustentável | `transporte_publico` — Transporte público | viagens | Diária | 1:15; 2:30; 3+:45 | 45 |
+| Mobilidade sustentável | `carona` — Carona compartilhada | viagens | Diária | 1:15; 2:30; 3+:45 | 45 |
+| Energia | `luzes_apagadas` — Economia de energia | minutos | Diária | 1–15:10; 16–30:25; 31–60:50; 61+:80 | 80 |
+| Energia | `aparelhos_desligados` — Aparelhos desligados | horas | Diária | 1–2:15; 3–4:30; 5–8:60; 9+:90 | 90 |
+| Energia | `energia_solar` — Energia solar gerada | kWh | Diária | 1–5:20; 6–15:45; 16+:70 | 70 |
+| Energia | `instalar_solar` — Instalar energia solar | instalação | Única | 1:200 | 200 |
+| Reciclagem | `garrafas_pet` — Reciclagem de garrafas | garrafas | Diária | 1–5:30; 6–10:60; 11–20:100; 21+:150 | 150 |
+| Reciclagem | `latinhas` — Reciclagem de latinhas | unidades | Diária | 1–5:20; 6–15:50; 16–30:90; 31+:140 | 140 |
+| Reciclagem | `papel_papelao` — Papel e papelão | kg | Diária | 1–2:20; 3–5:45; 6–10:80; 11+:120 | 120 |
+| Reciclagem | `eletronicos` — Descarte de eletrônicos | itens | Mensal | 1:30; 2:55; 3+:80 | 80 |
+| Água | `banho_reduzido` — Banho mais curto | minutos | Diária | 1–3:20; 4–6:40; 7–10:70; 11+:100 | 100 |
+| Água | `agua_reutilizada` — Água reutilizada | litros | Diária | 1–5:20; 6–15:45; 16–30:80; 31+:120 | 120 |
+| Água | `vazamento_corrigido` — Vazamento corrigido | reparos | Mensal | 1:60; 2+:100 | 100 |
+| Consumo consciente | `copos_evitados` — Copos descartáveis evitados | unidades | Diária | 1–2:15; 3–5:35; 6–10:60; 11+:90 | 90 |
+| Consumo consciente | `sacola_reutilizavel` — Sacola reutilizável | compras | Diária | 1:20; 2:35; 3–4:55; 5+:75 | 75 |
+| Natureza | `arvores_plantadas` — Árvores plantadas | mudas | Mensal | 1:50; 2:90; 3+:120 | 120 |
+| Natureza | `criar_composteira` — Criar uma composteira | instalação | Única | 1:150 | 150 |
 
-As regras são carregadas das tabelas `atividades` e `faixas_pontuacao`. Alterações de configuração devem ser versionadas em migrações. Não há edição manual de pontuação na interface.
+`XP adicional = max(0, min(XP da nova faixa, limite) − XP já concedido no período)`.
+
+Quatro registros de 4, 4, 4 e 2 garrafas concedem 30, 30, 40 e 0 XP. Todos ficam no histórico. Mensais somam entre diferentes dias do mesmo mês; por exemplo, eletrônicos de 1 + 1 + 1 + 1 itens concedem 30 + 25 + 25 + 0 XP. Conquistas únicas aceitam quantidade 1 e ficam bloqueadas após a primeira concessão, mesmo em outro mês/ano. Repetir uma operação idêntica retorna seu resultado original, sem criar outro registro.
+
+As regras são lidas do SQLite e validadas: faixas contíguas, sem sobreposição/lacuna, XP não decrescente e modalidade/período compatíveis. A última faixa é aberta para diárias/mensais; conquistas têm apenas 1 unidade. Alterações futuras devem atualizar a versão da regra da atividade e a configuração correspondente em uma migração. O XP histórico nunca é recalculado ou editado manualmente.
+
+### Períodos, datas e duplicidade
+
+- Diárias: chave `YYYY-MM-DD`; mensais: `YYYY-MM`; únicas: chave `VIDA` por usuário/atividade.
+- Só são aceitos registros do **momento atual**. Não há campo/API de data retroativa. Instante UTC, data local, período e versão são persistidos juntos, na transação, e não mudam ao alterar fuso depois.
+- O dia/mês seguinte começa um novo agrupamento, sem apagar histórico nem XP total. O relógio do aparelho continua sendo uma limitação offline; alterar esse relógio não é uma forma confiável de validar ações reais.
+- Mobilidade e atividades mensais exigem referência do trajeto/evento; nas demais ela é opcional. Use um código sem dados pessoais, como `trecho-2026-11-10-manha-1` ou `reparo-2026-11-10-1`.
+- A mesma referência de mobilidade não pode ser usada em bicicleta, caminhada, carro elétrico, transporte público ou carona, nem repetida em outra data. Em viagens multimodais, identifique **trechos distintos reais** separadamente.
+- Um reparo/descarte/plantio não pode ser reapresentado no mês seguinte com a mesma referência. Eventos novos precisam de referências novas. A comparação remove espaços extras e ignora maiúsculas/minúsculas.
+- Há índice único de operação, índice único de ação por usuário/grupo/referência e índice único de conquista. A referência é autodeclarada: o MVP não reconhece o mesmo evento se alguém deliberadamente inventar outro código.
 
 | Nível | Nome | XP total |
 | --- | --- | --- |
@@ -116,26 +150,28 @@ As regras são carregadas das tabelas `atividades` e `faixas_pontuacao`. Altera�
 | 4 | Guardião Verde | 1.000–1.999 |
 | 5 | Mestre Sustentável | 2.000+ (máximo) |
 
-O dia é a data local do dispositivo. XP total permanece entre dias. A semana começa na segunda-feira e termina antes da segunda seguinte. O desempate do ranking usa a data de cadastro crescente e o ID crescente. O nível no ranking é o nível total da conta, inclusive no ranking semanal. Contas sem atividade aparecem com zero XP; nenhum usuário fictício é inserido na instalação.
+O ranking soma XP efetivamente concedido. A semana começa na segunda-feira e termina antes da segunda seguinte: o XP mensal entra na semana do registro que o concedeu, sem redistribuição retroativa. O desempate usa cadastro crescente e ID crescente. O nível é o nível total da conta, inclusive no ranking semanal. Contas sem atividade aparecem com zero XP; nenhum usuário fictício é inserido na instalação.
 
 ## SQLite
 
 | Tabela | Conteúdo |
 | --- | --- |
 | `usuarios` | Identidade, e-mail único, hash/salt/custo da senha, bairro opcional e data de cadastro |
-| `atividades` | Nome, categoria, unidade, ODS, teto diário e situação ativa |
+| `atividades` | Código estável único, nome, categoria, unidade, ODS, tipo/período, limite de XP, grupo de ação, versão e situação ativa |
 | `faixas_pontuacao` | Atividade, mínimo, máximo opcional e XP |
-| `registros` | Usuário, atividade, quantidade, XP concedido, estimativas opcionais, potência, dia local, instante UTC, versões e ID único da operação |
-| `configuracoes` | Parâmetros versionados, inicialmente `versao_regra = xp-v1` |
+| `registros` | Usuário, atividade, quantidade, XP concedido, estimativas, potência, data local/UTC, tipo/período/chave, versões, referência/grupo de ação e operação única |
+| `configuracoes` | Parâmetros versionados, `versao_regra = xp-v2` |
 | `recuperacao` | Hash, salt e custo do código secreto por usuário |
 
-Chaves estrangeiras são habilitadas e verificadas. Há índices por usuário/dia/atividade e por dia/usuário. O banco inicial está na versão 1; não há banco anterior a migrar. O callback de upgrade rejeita caminhos sem implementação para evitar perda silenciosa de dados. XP total e nível não são armazenados redundantemente.
+Chaves estrangeiras são habilitadas e verificadas. A migração transacional **v1 → v2** preserva usuários, hashes, recuperação, registros, XP, instantes e IDs legados: 1 → `garrafas_pet`, 2 → `bicicleta`, 3 → `luzes_apagadas`. Registros anteriores continuam `xp-v1`, com chave diária baseada na data local original. Os limites aprovados passam a 150/150/80 para essas atividades; os novos registros usam `xp-v2`.
+
+O catálogo passa a 20 atividades ativas e 66 faixas. Não é reinserido ao reabrir o banco. Eventuais atividades locais extras são preservadas como legadas inativas, com seu histórico, em vez de apagadas. A coluna antiga `limite_xp_diario` fica por compatibilidade; v2 lê `limite_xp` por período. Há índices por usuário/dia, por usuário/atividade/período e restrições únicas para conquistas e ações. Um trigger valida a coerência da chave de período e quantidade de conquista. Falha de migração reverte inclusive o DDL e mantém a versão 1. XP total e nível continuam derivados.
 
 ## Impacto ambiental e limites do MVP
 
 Energia: `kWh = potência_W × minutos / 60.000`, com potência fornecida pelo usuário a partir da etiqueta da lâmpada. Fonte dimensional: [EIA — Measuring electricity](https://www.eia.gov/energyexplained/electricity/measuring-electricity.php). O app não assume uma lâmpada padrão. A soma inclui apenas registros com potência conhecida.
 
-CO₂ fica **não calculado** nesta versão: reciclagem precisa de material e massa; bicicleta precisa de um cenário motorizado substituído e fator validado; energia precisa de um fator da rede aplicável. O código reserva esses campos como `NULL` e armazena a versão de fatores em cada registro. Não se apresentam números ambientais inventados. Veja as hipóteses no documento de arquitetura.
+CO₂ fica **não calculado** nesta versão: reciclagem precisa de material/massa e fator aplicável; mobilidade precisa de cenário substituído e fator validado; energia precisa de fator da rede. Nas novas atividades, são exibidas as quantidades diretas registradas, sem inventar conversões. kWh de energia solar são uma quantidade declarada de geração, não uma estimativa automática de energia evitada. Carros elétricos não emitem gases pelo escapamento, mas geração de energia e ciclo de vida também têm impactos. Os campos sem fator ficam `NULL`. Veja as hipóteses no documento de arquitetura.
 
 As senhas usam PBKDF2-HMAC-SHA256 com 600.000 iterações, salt de 128 bits e hash de 256 bits. A sessão usa armazenamento protegido pelo sistema Android. O código de recuperação deve ser guardado pelo usuário fora do app; sem ele ou a senha não existe recuperação remota. Dados pessoais e ações ficam no SQLite privado, sem criptografia extra do arquivo. Root, alterações do banco/relógio e comprometimento do aparelho estão fora da proteção do MVP. Apagar os dados ou reinstalar pode perder o progresso. Não há sincronização nem ranking online.
 
@@ -172,4 +208,4 @@ Capturas de widgets Flutter renderizados pelo teste integrado, com a conta expl�
 - Victor Aparecido Sassati — Desenvolvedor.
 - Vitor Landim de Carvalho Rosa — Desenvolvedor.
 
-Os papéis são os informados nos requisitos; não se atribuem contribuições individuais não verificadas. O histórico Git local foi preservado. O remoto privado configurado é [oTchulo/ecohabit-v3](https://github.com/oTchulo/ecohabit-v3), com branch de trabalho `main`; o acesso depende de autorização no GitHub.
+Os papéis são os informados nos requisitos; não se atribuem contribuições individuais não verificadas. O histórico Git local foi preservado. O repositório existente é [oTchulo/ecohabit-v3](https://github.com/oTchulo/ecohabit-v3), com branch de trabalho `main`. A alteração de visibilidade exige confirmação explícita do proprietário; nenhum repositório duplicado é necessário.
