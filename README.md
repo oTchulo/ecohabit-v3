@@ -70,7 +70,21 @@ flutter test
 flutter build apk --debug
 ```
 
-Ou, no Windows: `powershell -File scripts/check.ps1 -BuildApk`. O script interrompe ao primeiro erro. O APK de depuração foi gerado em `build/app/outputs/flutter-apk/app-debug.apk` (165,3 MB; Android API 24+, ARM e x86_64). A assinatura foi verificada; a execução em aparelho está pendente. A distribuição de produção requer assinatura própria; a configuração inicial de release ainda usa chave de depuração.
+Ou, no Windows: `powershell -File scripts/check.ps1 -BuildApk`. O script interrompe ao primeiro erro. O APK de depuração foi gerado em `build/app/outputs/flutter-apk/app-debug.apk` (165,3 MB; Android API 24+, ARM e x86_64). A assinatura foi verificada, e a inicialização foi confirmada no emulador Pixel 6 com Android 15 (API 35). A distribuição de produção requer assinatura própria; a configuração inicial de release ainda usa chave de depuração.
+
+### VS Code e emulador
+
+As extensões Flutter e Dart são recomendadas em `.vscode/extensions.json`. Abra `lib/main.dart`, selecione o dispositivo Android na barra de status e inicie a configuração **EcoHabit · Android** com F5. O caminho do SDK desta máquina fica em `.vscode/settings.json`, ignorado pelo Git; cada integrante deve configurar seu próprio SDK.
+
+Na validação de 10/11/2026, `adb emu avd name` confirmou o AVD `Pixel_6`, e `flutter devices` identificou o dispositivo como `emulator-5554`. O aplicativo foi iniciado com:
+
+```powershell
+$env:ANDROID_HOME = "$PWD\.tools\android-sdk"
+$env:GRADLE_USER_HOME = "$PWD\.tools\gradle-cache"
+.\.tools\flutter\bin\flutter.bat run -d emulator-5554
+```
+
+O identificador pode mudar em outra execução: confira `flutter devices` antes de reutilizar o comando. Não é necessário instalar Visual Studio para desenvolver o alvo Android.
 
 Para regenerar as capturas dos widgets reais, com conta exclusiva do teste e banco temporário:
 
@@ -127,6 +141,10 @@ As senhas usam PBKDF2-HMAC-SHA256 com 600.000 iterações, salt de 128 bits e ha
 
 ## Capturas
 
+Captura real da tela de login no emulador Pixel 6, Android 15, obtida por ADB após confirmar o processo do aplicativo em primeiro plano:
+
+<img src="docs/screenshots/android-pixel6-login.png" alt="EcoHabit executando no Pixel 6" width="320">
+
 Capturas de widgets Flutter renderizados pelo teste integrado, com a conta explícita “Conta de teste”. Não representam execução em um aparelho ou emulador Android. Nenhuma conta de demonstração é criada na instalação normal.
 
 | Login | Início | Atividades |
@@ -154,4 +172,4 @@ Capturas de widgets Flutter renderizados pelo teste integrado, com a conta expl�
 - Victor Aparecido Sassati — Desenvolvedor.
 - Vitor Landim de Carvalho Rosa — Desenvolvedor.
 
-Os papéis são os informados nos requisitos; não se atribuem contribuições individuais não verificadas. Repositório Git local inicializado, sem publicação remota automática. Revise os arquivos e configure o repositório GitHub da equipe para publicar.
+Os papéis são os informados nos requisitos; não se atribuem contribuições individuais não verificadas. O histórico Git local foi preservado. O remoto privado configurado é [oTchulo/ecohabit-v3](https://github.com/oTchulo/ecohabit-v3), com branch de trabalho `main`; o acesso depende de autorização no GitHub.

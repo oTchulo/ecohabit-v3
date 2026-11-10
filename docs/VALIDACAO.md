@@ -1,6 +1,6 @@
 # Validação da implementação
 
-Ambiente preparado nesta execução: Windows, Flutter estável 3.47.9, Dart 3.13.7 e JDK 21. O diretório inicial estava vazio. SDKs e caches ficam em `.tools/`, ignorado pelo Git.
+Ambiente da implementação inicial: Windows, Flutter estável 3.47.9, Dart 3.13.7 e JDK 21. O diretório inicial estava vazio. SDKs e caches ficam em `.tools/`, ignorado pelo Git. A validação posterior no Pixel 6 está registrada ao final.
 
 ## Etapas e evidências
 
@@ -26,7 +26,7 @@ Ambiente preparado nesta execução: Windows, Flutter estável 3.47.9, Dart 3.13
 - `flutter build apk --debug`: sucesso. A primeira compilação completa foi aprovada após instalar SDKs/NDK; a compilação final incremental, com os últimos ajustes, terminou com código 0 em aproximadamente 47 segundos.
 - `apksigner verify --verbose`: sucesso, assinatura APK v2 válida, um assinante de depuração.
 - `aapt dump badging`: confirmou pacote, versão, nome, SDKs e arquiteturas descritos abaixo.
-- `git init`: repositório local inicializado; não houve publicação remota nem execução de CI no GitHub.
+- `git init`: repositório local inicializado na implementação inicial, preservada no commit `fcea4c4`.
 
 Os primeiros testes de widget precisaram de ajuste para usar SQLite FFI sem isolate dentro de `tester.runAsync`. O teste de fluxo também foi corrigido para aguardar a saída do SnackBar e rolar até o item efetivo do histórico. As execuções com essas falhas não foram contadas como aprovação.
 
@@ -40,12 +40,12 @@ São renderizações de teste Flutter com conta explicitamente identificada como
 
 ## Limitações de verificação
 
-- Sem dispositivo/emulador Android conectado: não foi executado teste manual de instalação, ciclo de vida em aparelho, Keystore ou teclado Android.
-- A sessão em testes usa armazenamento em memória; a integração nativa de armazenamento protegido depende de validação em Android.
+- A instalação e a inicialização foram verificadas posteriormente no Pixel 6. Fluxos completos de cadastro/recuperação, ciclo de vida, Keystore e teclado no Android ainda precisam de testes específicos em dispositivo.
+- A sessão nos testes automatizados usa armazenamento em memória; não se atribui a esses testes uma validação nativa do Keystore.
 - O custo de produção de PBKDF2 não foi cronometrado. O dublê usa custo reduzido para testes e há comparação do algoritmo real com vetor conhecido.
 - Não foram validados fatores de CO2; os campos correspondentes são nulos por decisão explícita e documentada.
 - A migração histórica não pode ser testada sem uma versão anterior: este é o schema inicial v1. Versões futuras precisam de migrações implementadas e testadas.
-- O workflow foi criado, mas nenhuma execução remota foi realizada.
+- O resultado de CI remoto não faz parte da validação local registrada aqui; deve ser consultado no GitHub Actions.
 
 ## Resultado Android
 
@@ -55,7 +55,28 @@ APK final gerado em `build/app/outputs/flutter-apk/app-debug.apk` e verificado e
 - Versão: `3.0.0`, código `1`.
 - SDK mínimo: API 24; target/compile: API 36.
 - Arquiteturas: `arm64-v8a`, `armeabi-v7a`, `x86_64`.
-- Tamanho: 165.338.859 bytes (aproximadamente 165,3 MB; build debug com três arquiteturas).
-- SHA-256: `254A0B568484ACA2C4A5BF043C811A76AAA3680D3572CE459BD9B1305412DD0A`.
+- Tamanho do APK recompilado para a execução no emulador: 165.338.471 bytes (aproximadamente 165,3 MB; build debug com três arquiteturas).
+- SHA-256 desse APK: `547DE9523FBE5B83C9BEDDBBDF481D5C83372BFCC2606C2F6DEFEFE2ACDF4F4F`.
 
-A geração e a assinatura foram verificadas; a instalação/execução em aparelho Android permanece pendente. O APK é de depuração, destinado à demonstração e desenvolvimento, e não está incluído no Git.
+A geração, a assinatura e a inicialização em emulador foram verificadas. A execução em aparelho físico permanece pendente. O APK é de depuração, destinado à demonstração e desenvolvimento, e não está incluído no Git.
+
+## Execução no Pixel 6 — 10/11/2026
+
+- `flutter doctor -v`: toolchain Android aprovado, licenças aceitas. Flutter/Dart estão disponíveis pelo SDK local, ainda fora do PATH global. A ausência de Visual Studio afeta o alvo Windows, não o Android.
+- `flutter devices`: encontrou `emulator-5554`, Android 15 (API 35), x86_64. `adb -s emulator-5554 emu avd name` retornou `Pixel_6`, com boot concluído.
+- `flutter pub get`: sucesso, sem atualizar as versões travadas das dependências.
+- `flutter run -d emulator-5554`: compilação aprovada, APK instalado, arquivos sincronizados e serviço de depuração Dart conectado. O Flutter utilizou o JDK 25 incluído no Android Studio; a compilação inicial também havia sido validada com JDK 21.
+- `adb shell pidof br.edu.umc.ecohabit`: confirmou o processo ativo. `dumpsys activity activities` confirmou `br.edu.umc.ecohabit/.MainActivity` como atividade em primeiro plano.
+- Captura ADB inspecionada visualmente: tela de login renderizada, sem mensagem de erro de inicialização. Arquivo: `docs/screenshots/android-pixel6-login.png`.
+- O buffer de crashes consultado não apresentou falha do EcoHabit. Houve avisos não fatais de SDK XML, compilação Java 8 em dependência e frames descartados durante a inicialização do emulador.
+- A exportação de hierarquia via `uiautomator` retornou raiz nula; a confirmação visual foi feita pela captura direta da tela, juntamente com a atividade Android e o serviço Dart.
+- Não foi necessário alterar código Dart nem regras de negócio. O aplicativo foi mantido aberto para testes.
+
+## Preparação do GitHub
+
+- Git existente, branch `main`, histórico inicial preservado. Não havia remoto configurado.
+- GitHub CLI oficial instalada em `.tools/`, com checksum verificado. Autenticação concluída pelo usuário; credenciais guardadas no keyring do Windows, fora do projeto.
+- Repositório `oTchulo/ecohabit-v3` criado após verificar que não existia. A API confirmou `isPrivate: true`; remoto `origin` associado por HTTPS.
+- `.gitignore` ampliado para caches, segredos, arquivos `.env`, chaves de assinatura e bancos SQLite/arquivos auxiliares. O caminho local do SDK em `.vscode/settings.json` está ignorado; somente recomendações de extensões e configuração de execução são compartilhadas.
+- A inspeção dos caminhos do histórico e de padrões de chave privada/token não encontrou candidatos. Capturas compartilhadas não contêm credenciais ou dados de contas reais.
+- Nenhuma branch ou alteração remota foi apagada; não foi utilizado push forçado.
