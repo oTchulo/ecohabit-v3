@@ -12,6 +12,7 @@ class AppState extends ChangeNotifier {
   String? error;
   List<Activity> catalog = [];
   Map<int, int> quantities = {};
+  Map<int, PeriodTotals> periods = {};
   Map<String, Object?> summary = {};
   List<Map<String, Object?>> history = [], general = [], weekly = [];
   Timer? _timer;
@@ -55,13 +56,17 @@ class AppState extends ChangeNotifier {
 
   Future<void> refresh() async {
     if (account == null) return;
+    final current = activities.clock();
     catalog = await activities.catalog();
-    quantities = await activities.today(account!.id);
+    periods = await activities.periodTotals(account!.id, at: current);
+    quantities = {
+      for (final entry in periods.entries) entry.key: entry.value.quantity
+    };
     summary = await activities.summary(account!.id);
     history = await activities.history(account!.id);
     general = await activities.ranking();
     weekly = await activities.ranking(weekly: true);
-    _day = localDay(activities.clock());
+    _day = localDay(current);
   }
 
   Future<bool> login(String email, String password) => run(() async {
@@ -79,6 +84,7 @@ class AppState extends ChangeNotifier {
         account = null;
         summary = {};
         quantities = {};
+        periods = {};
         history = [];
         general = [];
         weekly = [];

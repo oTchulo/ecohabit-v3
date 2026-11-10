@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../models/domain.dart';
 import '../providers/app_state.dart';
 import '../widgets/shared.dart';
+import '../widgets/activity_card.dart';
+import '../core/constants/activity_categories.dart';
 import 'register_activity_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -14,6 +16,8 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int selected = 0;
   String category = 'Todas';
+  String query = '';
+  final searchController = TextEditingController();
   bool weekly = true;
   @override
   void initState() {
@@ -49,6 +53,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    searchController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -81,68 +86,69 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         ProgressCard(xp: s.xp),
         ImpactCard(data: s.summary),
         title('Qual será sua próxima ação?'),
-        ...s.catalog.map((a) => activityCard(s, a)),
+        ...s.catalog.take(3).map((a) => activityCard(s, a)),
+        FilledButton.tonal(
+            onPressed: () => setState(() => selected = 1),
+            child: Text('Explorar as ${s.catalog.length} atividades')),
+        const SizedBox(height: 16),
         const Text(
             'Seu progresso é salvo neste dispositivo.\nSustentabilidade urbana · ODS 7 e ODS 11',
             textAlign: TextAlign.center),
       ];
   Widget activityCard(AppState s, Activity a) {
-    final quantity = s.quantities[a.id] ?? 0;
-    return SectionCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        CircleAvatar(
-            backgroundColor: const Color(0xFFE8F5E9),
-            child: Icon(activityIcon(a.id), color: const Color(0xFF2E7D32))),
-        const SizedBox(width: 12),
-        Expanded(
-            child: Text(a.name, style: Theme.of(context).textTheme.titleMedium))
-      ]),
-      const SizedBox(height: 16),
-      Text('Hoje: $quantity ${a.unit} · ${a.score(quantity)} XP'),
-      const SizedBox(height: 8),
-      LinearProgressIndicator(
-          value: a.score(quantity) / a.limit,
-          borderRadius: BorderRadius.circular(8)),
-      const SizedBox(height: 8),
-      Text('Limite diário: ${a.limit} XP · ODS ${a.id == 3 ? 7 : 11}'),
-      const SizedBox(height: 8),
-      Wrap(
-          spacing: 6,
-          children: a.bands
-              .map((b) => Chip(
-                  label: Text(
-                      '${b.min}${b.max == null ? '+' : '–${b.max}'}: ${b.xp} XP',
-                      style: const TextStyle(fontSize: 11))))
-              .toList()),
-      const SizedBox(height: 8),
-      Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.tonalIcon(
-              onPressed: s.busy ? null : () => open(a),
-              icon: const Icon(Icons.add),
-              label: const Text('Registrar'))),
-    ]));
+    return ActivityCard(
+        activity: a,
+        totals: s.periods[a.id] ?? const PeriodTotals(),
+        now: s.activities.clock(),
+        onRegister: s.busy ? null : () => open(a));
   }
 
   List<Widget> activities(AppState s) => [
         title('Ações para uma cidade melhor'),
+        TextField(
+            controller: searchController,
+            key: const ValueKey('activity-search'),
+            decoration: const InputDecoration(
+                labelText: 'Buscar atividade', prefixIcon: Icon(Icons.search)),
+            onChanged: (value) => setState(() => query = value)),
+        const SizedBox(height: 12),
         SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-                children: ['Todas', 'Reciclagem', 'Mobilidade', 'Energia']
+                children: ['Todas', ...ActivityCategory.all.map((c) => c.code)]
                     .map((c) => Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: ChoiceChip(
-                            label: Text(c),
+                            avatar: c == 'Todas'
+                                ? null
+                                : Icon(ActivityCategory.byCode(c).icon,
+                                    size: 18,
+                                    color: ActivityCategory.byCode(c).color),
+                            label: Text(c == 'Todas'
+                                ? c
+                                : ActivityCategory.byCode(c).label),
                             selected: category == c,
                             onSelected: (_) => setState(() => category = c))))
                     .toList())),
         const SizedBox(height: 20),
         ...s.catalog
-            .where((a) => category == 'Todas' || a.category == category)
+            .where((a) =>
+                (category == 'Todas' || a.category == category) &&
+                searchText(
+                        '${a.name} ${a.code} ${ActivityCategory.byCode(a.category).label}')
+                    .contains(searchText(query)))
             .map((a) => activityCard(s, a)),
-        if (s.catalog.isEmpty) const Text('Nenhuma atividade disponível.'),
+        if (!s.catalog.any((a) =>
+            (category == 'Todas' || a.category == category) &&
+            searchText(
+                    '${a.name} ${a.code} ${ActivityCategory.byCode(a.category).label}')
+                .contains(searchText(query))))
+          const SectionCard(
+              child: Text(
+                  'Nenhuma atividade encontrada. Altere a busca ou a categoria.')),
+        const SectionCard(
+            child: Text(
+                'Impactos ambientais: as quantidades são autodeclaradas. Carros elétricos não emitem gases pelo escapamento, mas a geração de energia e o ciclo de vida também têm impactos. Não há fator de CO2 validado neste MVP.')),
       ];
   List<Widget> ranking(AppState s) {
     final rows = weekly ? s.weekly : s.general;
@@ -276,10 +282,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   'Sua jornada começa com a primeira ação. Registre uma atividade!')),
         ...s.history.map((r) => Card(
             child: ListTile(
-                leading: Icon(activityIcon(r['atividade_id'] as int)),
+                leading: Icon(activityIcon(r['codigo'] as String)),
                 title: Text('${r['nome']}'),
                 subtitle: Text(
-                    '${r['quantidade']} ${r['unidade']} · ${r['data_local']}\n${DateTime.parse(r['criado_em'] as String).toLocal().toString().substring(11, 16)} · ${r['versao_regra']} / ${r['versao_fatores']}'),
+                    '${r['quantidade']} ${r['unidade']} · ${r['data_local']}\n${ScoringType.parse(r['tipo_pontuacao'] as String).label}: ${r['chave_periodo']} · ${r['versao_regra']}'),
                 isThreeLine: true,
                 trailing: Text('+${r['xp_concedido']} XP')))),
         const SizedBox(height: 12),

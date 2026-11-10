@@ -16,19 +16,60 @@ class ActivityRepository {
         await executor.query('atividades', where: 'ativo = 1', orderBy: 'id');
     final bands =
         await executor.query('faixas_pontuacao', orderBy: 'quantidade_minima');
+    for (final row in rows) {
+      if (ScoringType.parse(row['tipo_pontuacao'] as String).period !=
+          row['periodo_pontuacao']) {
+        throw const DomainError(
+            'Catálogo inconsistente: modalidade e período incompatíveis.');
+      }
+    }
     return rows
         .map((r) => Activity(
             r['id'] as int,
             r['nome'] as String,
             r['categoria'] as String,
             r['unidade'] as String,
-            r['limite_xp_diario'] as int,
+            r['limite_xp'] as int,
             bands
                 .where((b) => b['atividade_id'] == r['id'])
                 .map((b) => Band(b['quantidade_minima'] as int,
                     b['quantidade_maxima'] as int?, b['xp'] as int))
-                .toList()))
-        .toList();
+                .toList(),
+            code: r['codigo'] as String,
+            type: ScoringType.parse(r['tipo_pontuacao'] as String),
+            actionGroup: r['grupo_acao'] as String,
+            ruleVersion: r['versao_regra'] as String,
+            ods: r['ods'] as int))
+        .map((activity) {
+      activity.validate();
+      return activity;
+    }).toList();
+  }
+
+  Future<Map<int, PeriodTotals>> periodTotals(int userId,
+      {DateTime? at}) async {
+    final now = at ?? clock();
+    final rows = await db.rawQuery(
+        '''SELECT r.atividade_id, SUM(r.quantidade) AS quantidade,
+      SUM(r.xp_concedido) AS xp, COUNT(*) AS registros FROM registros r
+      JOIN atividades a ON a.id = r.atividade_id
+      WHERE r.usuario_id = ? AND r.chave_periodo = CASE a.tipo_pontuacao
+        WHEN 'DIARIA' THEN ? WHEN 'PERIODICA' THEN ? ELSE 'VIDA' END
+      GROUP BY r.atividade_id''',
+        [userId, localDay(now), localDay(now).substring(0, 7)]);
+    return {
+      for (final r in rows)
+        r['atividade_id'] as int: PeriodTotals(
+            quantity: r['quantidade'] as int,
+            xp: r['xp'] as int,
+            records: r['registros'] as int)
+    };
+  }
+
+  static String? normalizeReference(String? value) {
+    final normalized =
+        value?.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
   Future<Map<int, int>> today(int userId) async {
@@ -44,6 +85,7 @@ class ActivityRepository {
       required int activityId,
       required int quantity,
       required String operationId,
+      String? actionReference,
       double? watts}) async {
     if (quantity <= 0 || quantity > 2147483647) {
       throw const DomainError(
@@ -55,6 +97,11 @@ class ActivityRepository {
     if (watts != null && (!watts.isFinite || watts <= 0)) {
       throw const DomainError('Potência inválida.');
     }
+    final reference = normalizeReference(actionReference);
+    if (reference != null && reference.length > 120) {
+      throw const DomainError(
+          'A referência deve ter no máximo 120 caracteres.');
+    }
     return db.transaction((txn) async {
       final previous = await txn.query('registros',
           where: 'identificador_operacao = ?', whereArgs: [operationId]);
@@ -63,7 +110,8 @@ class ActivityRepository {
         if (r['usuario_id'] != userId ||
             r['atividade_id'] != activityId ||
             r['quantidade'] != quantity ||
-            r['potencia_watts'] != watts) {
+            r['potencia_watts'] != watts ||
+            r['referencia_acao'] != reference) {
           throw const DomainError(
               'Identificador já utilizado em outra operação.');
         }
@@ -73,22 +121,47 @@ class ActivityRepository {
       final matches = activities.where((a) => a.id == activityId);
       if (matches.isEmpty) throw const DomainError('Atividade indisponível.');
       final activity = matches.single;
+      if (activity.requiresActionReference && reference == null) {
+        throw const DomainError(
+            'Informe uma referência para identificar este trajeto ou evento.');
+      }
+      if (activity.type == ScoringType.unique && quantity != 1) {
+        throw const DomainError(
+            'Conquistas únicas aceitam uma instalação por usuário.');
+      }
+      if (watts != null && activity.code != 'luzes_apagadas') {
+        throw const DomainError('Potência só se aplica a luzes apagadas.');
+      }
       final now = clock();
+      final period = activity.periodKey(now);
       final rows = await txn.rawQuery(
           '''SELECT COALESCE(SUM(quantidade),0) AS quantidade,
-        COALESCE(SUM(xp_concedido),0) AS xp FROM registros
-        WHERE usuario_id = ? AND atividade_id = ? AND data_local = ?''',
-          [userId, activityId, localDay(now)]);
+        COALESCE(SUM(xp_concedido),0) AS xp, COUNT(*) AS registros FROM registros
+        WHERE usuario_id = ? AND atividade_id = ? AND chave_periodo = ?''',
+          [userId, activityId, period]);
+      if (activity.type == ScoringType.unique &&
+          (rows.single['registros'] as int) > 0) {
+        throw const DomainError(
+            'Conquista já concluída. Ela só pode ser registrada uma vez.');
+      }
+      if (reference != null) {
+        final duplicates = await txn.query('registros',
+            columns: ['id'],
+            where: 'usuario_id = ? AND grupo_acao = ? AND referencia_acao = ?',
+            whereArgs: [userId, activity.actionGroup, reference],
+            limit: 1);
+        if (duplicates.isNotEmpty) {
+          throw const DomainError(
+              'Este trajeto ou evento já foi registrado. Use uma referência distinta apenas para uma nova ação real.');
+        }
+      }
       final before = rows.single['quantidade'] as int;
       final granted = rows.single['xp'] as int;
       // O total já concedido também protege contra excesso após mudanças de configuração.
       final delta = (activity.score(before + quantity) - granted)
           .clamp(0, activity.limit)
           .toInt();
-      final impact = impacts.estimate(activityId, quantity, watts: watts);
-      final rule = (await txn.query('configuracoes',
-              where: 'chave = ?', whereArgs: ['versao_regra']))
-          .single['valor'];
+      final impact = impacts.estimate(activity.code, quantity, watts: watts);
       await txn.insert('registros', {
         'usuario_id': userId,
         'atividade_id': activityId,
@@ -99,9 +172,14 @@ class ActivityRepository {
         'potencia_watts': watts,
         'data_local': localDay(now),
         'criado_em': now.toUtc().toIso8601String(),
-        'versao_regra': rule,
+        'versao_regra': activity.ruleVersion,
         'versao_fatores': ImpactService.version,
-        'identificador_operacao': operationId
+        'identificador_operacao': operationId,
+        'tipo_pontuacao': activity.type.databaseValue,
+        'periodo_pontuacao': activity.type.period,
+        'chave_periodo': period,
+        'referencia_acao': reference,
+        'grupo_acao': activity.actionGroup,
       });
       return delta;
     });
@@ -115,7 +193,7 @@ class ActivityRepository {
           [userId]))
       .single;
   Future<List<Map<String, Object?>>> history(int userId) => db.rawQuery('''
-    SELECT r.*, a.nome, a.unidade FROM registros r JOIN atividades a ON a.id = r.atividade_id
+    SELECT r.*, a.nome, a.unidade, a.codigo, a.categoria FROM registros r JOIN atividades a ON a.id = r.atividade_id
     WHERE r.usuario_id = ? ORDER BY r.criado_em DESC, r.id DESC''', [userId]);
   Future<List<Map<String, Object?>>> ranking({bool weekly = false}) {
     final start = weekStart(clock());

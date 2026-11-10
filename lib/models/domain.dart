@@ -17,10 +17,52 @@ class Band {
 
 class Activity {
   final int id, limit;
-  final String name, category, unit;
+  final String name, category, unit, code, ruleVersion, actionGroup;
+  final ScoringType type;
+  final int ods;
   final List<Band> bands;
   const Activity(
-      this.id, this.name, this.category, this.unit, this.limit, this.bands);
+      this.id, this.name, this.category, this.unit, this.limit, this.bands,
+      {required this.code,
+      required this.type,
+      required this.actionGroup,
+      this.ruleVersion = 'xp-v2',
+      this.ods = 11});
+  bool get requiresActionReference =>
+      actionGroup == 'TRAJETO' || type == ScoringType.monthly;
+  String periodKey(DateTime date) => switch (type) {
+        ScoringType.daily => localDay(date),
+        ScoringType.monthly => localDay(date).substring(0, 7),
+        ScoringType.unique => 'VIDA',
+      };
+  void validate() {
+    if (code.isEmpty || limit <= 0 || bands.isEmpty || bands.first.min != 1) {
+      throw const DomainError(
+          'Catálogo inconsistente: código, limite ou faixas inválidos.');
+    }
+    for (var i = 0; i < bands.length; i++) {
+      final band = bands[i];
+      if (band.xp <= 0 ||
+          (band.max != null && band.max! < band.min) ||
+          (i > 0 &&
+              (bands[i - 1].max == null ||
+                  band.min != bands[i - 1].max! + 1 ||
+                  band.xp < bands[i - 1].xp))) {
+        throw const DomainError(
+            'Catálogo inconsistente: faixas devem ser contínuas e XP crescente.');
+      }
+    }
+    if (type == ScoringType.unique) {
+      if (bands.length != 1 || bands.single.min != 1 || bands.single.max != 1) {
+        throw const DomainError(
+            'Conquistas únicas devem aceitar apenas uma instalação.');
+      }
+    } else if (bands.last.max != null) {
+      throw const DomainError(
+          'A última faixa deve abranger todas as quantidades superiores.');
+    }
+  }
+
   int score(int quantity) {
     if (quantity <= 0) return 0;
     for (final band in bands) {
@@ -31,8 +73,25 @@ class Activity {
     return 0;
   }
 
-  int additional(int before, int quantity) =>
-      max(0, score(before + quantity) - score(before));
+  int additional(int before, int quantity, {int? granted}) =>
+      max(0, score(before + quantity) - (granted ?? score(before)));
+}
+
+enum ScoringType {
+  daily('DIARIA', 'DIA', 'Diária'),
+  monthly('PERIODICA', 'MES', 'Mensal'),
+  unique('UNICA', 'VIDA', 'Conquista única');
+
+  final String databaseValue, period, label;
+  const ScoringType(this.databaseValue, this.period, this.label);
+  static ScoringType parse(String value) =>
+      values.firstWhere((type) => type.databaseValue == value);
+}
+
+class PeriodTotals {
+  final int quantity, xp, records;
+  const PeriodTotals({this.quantity = 0, this.xp = 0, this.records = 0});
+  bool get completed => records > 0;
 }
 
 class Level {

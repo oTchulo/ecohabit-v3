@@ -46,6 +46,7 @@ void main() {
           userId: uid,
           activityId: activity,
           quantity: quantity,
+          actionReference: operation,
           operationId: operation);
   setUp(() async {
     db = await AppDatabase.open(
@@ -147,7 +148,7 @@ void main() {
   });
   test('limite configurável e faixas sem bônus inventados', () async {
     final u = await user();
-    await db.update('atividades', {'limite_xp_diario': 50},
+    await db.update('atividades', {'limite_xp': 50},
         where: 'id = ?', whereArgs: [1]);
     expect(await record(u.id, 21, 'a'), 50);
     expect(await record(u.id, 100, 'b'), 0);
@@ -239,9 +240,9 @@ void main() {
     expect(row['co2_estimado'], isNull);
     expect(row['versao_fatores'], ImpactService.version);
     expect(row['potencia_watts'], 10);
-    expect(ImpactService().estimate(1, 20).co2, isNull);
-    expect(ImpactService().estimate(2, 20).co2, isNull);
-    expect(ImpactService().estimate(3, 60).kwh, isNull);
+    expect(ImpactService().estimate('garrafas_pet', 20).co2, isNull);
+    expect(ImpactService().estimate('bicicleta', 20).co2, isNull);
+    expect(ImpactService().estimate('luzes_apagadas', 60).kwh, isNull);
   });
   test('persistência após fechar e reabrir SQLite', () async {
     final directory = await Directory.systemTemp.createTemp('ecohabit_test_');

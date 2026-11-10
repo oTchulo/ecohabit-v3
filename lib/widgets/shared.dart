@@ -75,8 +75,22 @@ class ImpactCard extends StatelessWidget {
   }
 }
 
-IconData activityIcon(int id) => switch (id) {
-      1 => Icons.recycling,
-      2 => Icons.directions_bike,
-      _ => Icons.lightbulb_outline
+IconData activityIcon(String code) => switch (code) {
+      'garrafas_pet' || 'latinhas' || 'papel_papelao' => Icons.recycling,
+      'bicicleta' => Icons.directions_bike,
+      'caminhada' => Icons.directions_walk,
+      'carro_eletrico' => Icons.electric_car_outlined,
+      'carona' => Icons.people_outline,
+      'transporte_publico' => Icons.directions_bus_outlined,
+      'luzes_apagadas' => Icons.lightbulb_outline,
+      'aparelhos_desligados' => Icons.power_settings_new,
+      'energia_solar' || 'instalar_solar' => Icons.solar_power_outlined,
+      'eletronicos' => Icons.devices_other,
+      'banho_reduzido' => Icons.shower_outlined,
+      'agua_reutilizada' || 'vazamento_corrigido' => Icons.water_drop_outlined,
+      'copos_evitados' => Icons.local_drink_outlined,
+      'sacola_reutilizavel' => Icons.shopping_bag_outlined,
+      'arvores_plantadas' => Icons.forest_outlined,
+      'criar_composteira' => Icons.compost_outlined,
+      _ => Icons.eco_outlined,
     };

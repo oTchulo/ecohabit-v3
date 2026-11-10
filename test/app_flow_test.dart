@@ -88,6 +88,7 @@ void main() {
     await tester.pumpAndSettle();
     await capture('atividades');
     await tester.ensureVisible(find.text('Registrar').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Registrar').first);
     await tester.pumpAndSettle();
     expect(find.text('Registrar ação'), findsOneWidget);
@@ -102,7 +103,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('+30 XP estimados'), findsOneWidget);
     await capture('registro');
-    await tester.ensureVisible(find.text('Confirmar registro'));
+    await tester.scrollUntilVisible(find.text('Confirmar registro'), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     await tester.runAsync(() async {
       await tester.tap(find.text('Confirmar registro'));
       while (state.busy) {
