@@ -1,0 +1,23 @@
+name: ecohabit
+description: Plataforma offline de sustentabilidade urbana da UMC.
+publish_to: none
+version: 3.0.0+1
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  provider: ^6.1.2
+  sqflite: ^2.4.2
+  path: ^1.9.1
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.4
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  sqflite_common_ffi: ^2.3.6
+flutter:
+  uses-material-design: true
