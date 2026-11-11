@@ -207,5 +207,3 @@ Capturas de widgets Flutter renderizados pelo teste integrado, com a conta expl�
 - Samuel Dantas Lima da Silva — Analista de Sistemas.
 - Victor Aparecido Sassati — Desenvolvedor.
 - Vitor Landim de Carvalho Rosa — Desenvolvedor.
-
-Os papéis são os informados nos requisitos; não se atribuem contribuições individuais não verificadas. O histórico Git local foi preservado. O repositório existente é [oTchulo/ecohabit-v3](https://github.com/oTchulo/ecohabit-v3), com branch de trabalho `main`. A alteração de visibilidade exige confirmação explícita do proprietário; nenhum repositório duplicado é necessário.
