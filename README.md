@@ -206,3 +206,4 @@ Capturas de widgets Flutter renderizados pelo teste integrado, com a conta expl�
 - Micael Nascimento de Sousa — Scrum Master.
 - Samuel Dantas Lima da Silva — Analista de Sistemas (Dev).
 - Victor Aparecido Sassati — Desenvolvedor.
+- Vitor Landim de Carvalho Rosa — Desenvolvedor.
